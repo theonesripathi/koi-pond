@@ -1,0 +1,167 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Koi Pond</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap">
+<style>
+:root{--bg:#e9f1ea;--ink:#12302f;--muted:#4b6b68;--water:#bfe0d8;--water2:#b2d8cf;--koi:#e8472b;--koi2:#fff6e6;--pad:#3f8f4a;--card:#f7fbf7;--line:#c5d9d2;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b2423;--ink:#e6f2ec;--muted:#8fb3ab;--water:#124a49;--water2:#0f4140;--koi:#ff6a3d;--koi2:#fff6e6;--pad:#8fd16a;--card:#10312f;--line:#1f4a47}}
+:root[data-theme="dark"]{--bg:#0b2423;--ink:#e6f2ec;--muted:#8fb3ab;--water:#124a49;--water2:#0f4140;--koi:#ff6a3d;--koi2:#fff6e6;--pad:#8fd16a;--card:#10312f;--line:#1f4a47}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.55}
+main{max-width:720px;margin:0 auto;padding:28px 20px 56px}
+h1{font-size:clamp(2.6rem,9vw,4.4rem);font-weight:800;letter-spacing:-.03em;line-height:.95;margin:8px 0 12px}
+.lede{color:var(--muted);max-width:46ch;margin:0 0 24px;font-size:1.05rem}
+.hud{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;font-weight:600}
+.hud span b{font-size:1.5rem;font-weight:800;margin-left:6px}
+.stage{position:relative;border:2px solid var(--line);border-radius:18px;overflow:hidden;background:var(--water)}
+canvas{display:block;width:100%;height:auto;aspect-ratio:1;touch-action:none}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;background:color-mix(in srgb,var(--bg) 78%,transparent);padding:20px}
+.overlay[hidden]{display:none}
+.overlay h2{margin:0;font-size:1.8rem;font-weight:800}
+.overlay p{margin:0;color:var(--muted)}
+button{font:inherit;font-weight:600;cursor:pointer;border:0;border-radius:999px;background:var(--koi);color:#fff;padding:12px 26px}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.pad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,52px);gap:8px;justify-content:center;margin:18px 0 0}
+.pad button{padding:0;background:var(--card);color:var(--ink);border:2px solid var(--line);border-radius:14px;font-size:1.2rem}
+.pad .u{grid-column:2}.pad .l{grid-column:1;grid-row:2}.pad .d{grid-column:2;grid-row:2}.pad .r{grid-column:3;grid-row:2}
+@media (hover:hover) and (pointer:fine){.pad{display:none}}
+section{margin-top:40px;border-top:2px solid var(--line);padding-top:20px}
+h3{margin:0 0 8px;font-size:1.3rem}
+ul{padding-left:1.1em;margin:0;color:var(--muted)}li{margin:4px 0}
+footer{margin-top:40px;color:var(--muted);font-size:.9rem}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Koi Pond</h1>
+  <p class="lede">Guide a hungry koi around the pond. Eat lily pads to grow, and don’t bump the edge or your own tail.</p>
+
+  <div class="hud"><span>Score<b id="score">0</b></span><span>Best<b id="best">0</b></span></div>
+  <div class="stage">
+    <canvas id="c" width="480" height="480" aria-label="Koi pond game board"></canvas>
+    <div class="overlay" id="ov">
+      <h2 id="ovT">Ready?</h2>
+      <p id="ovP">Arrow keys or WASD to swim. Swipe on a phone.</p>
+      <button id="go">Start swimming</button>
+    </div>
+  </div>
+  <div class="pad" aria-label="On-screen controls">
+    <button class="u" data-d="u" aria-label="Up">▲</button>
+    <button class="l" data-d="l" aria-label="Left">◀</button>
+    <button class="d" data-d="d" aria-label="Down">▼</button>
+    <button class="r" data-d="r" aria-label="Right">▶</button>
+  </div>
+
+  <section>
+    <h3>How to play</h3>
+    <ul>
+      <li>Steer with the arrow keys, WASD, swipes or the buttons.</li>
+      <li>Each lily pad is worth 10 points and makes the koi a little faster.</li>
+      <li>Press Space to pause and resume.</li>
+    </ul>
+  </section>
+  <footer>Your best score is saved in this browser.</footer>
+</main>
+
+<script>
+(function(){
+  var N=20,S=24,cv=document.getElementById('c'),x=cv.getContext('2d');
+  var scoreEl=document.getElementById('score'),bestEl=document.getElementById('best');
+  var ov=document.getElementById('ov'),ovT=document.getElementById('ovT'),ovP=document.getElementById('ovP'),go=document.getElementById('go');
+  var snake,dir,next,food,score,best=0,timer,running=false,paused=false,speed;
+  try{best=parseInt(localStorage.getItem('koi-best'),10)||0}catch(e){}
+  bestEl.textContent=best;
+  var V={u:[0,-1],d:[0,1],l:[-1,0],r:[1,0]};
+  function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+  function place(){
+    do{food={x:Math.floor(Math.random()*N),y:Math.floor(Math.random()*N)}}
+    while(snake.some(function(s){return s.x===food.x&&s.y===food.y}));
+  }
+  function reset(){
+    snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];dir=V.r;next=V.r;score=0;speed=150;
+    scoreEl.textContent=0;place();
+  }
+  function start(){
+    reset();running=true;paused=false;ov.hidden=true;go.blur();
+    clearInterval(timer);timer=setInterval(tick,speed);draw();
+  }
+  function setDir(d){
+    var v=V[d];if(!v)return;
+    if(v[0]===-dir[0]&&v[1]===-dir[1])return;
+    next=v;
+  }
+  function end(){
+    running=false;clearInterval(timer);
+    if(score>best){best=score;bestEl.textContent=best;try{localStorage.setItem('koi-best',best)}catch(e){}}
+    ovT.textContent='Splash! Score '+score;
+    ovP.textContent=score>=best&&score>0?'That’s your best yet.':'Give it another swim.';
+    go.textContent='Swim again';ov.hidden=false;
+  }
+  function tick(){
+    dir=next;
+    var h={x:snake[0].x+dir[0],y:snake[0].y+dir[1]};
+    if(h.x<0||h.y<0||h.x>=N||h.y>=N||snake.some(function(s){return s.x===h.x&&s.y===h.y}))return end();
+    snake.unshift(h);
+    if(h.x===food.x&&h.y===food.y){
+      score+=10;scoreEl.textContent=score;place();
+      speed=Math.max(65,speed-4);clearInterval(timer);timer=setInterval(tick,speed);
+    }else snake.pop();
+    draw();
+  }
+  function draw(){
+    var W=N*S;
+    x.fillStyle=css('--water');x.fillRect(0,0,W,W);
+    x.fillStyle=css('--water2');
+    for(var i=0;i<N;i++)for(var j=0;j<N;j++)if((i+j)%2===0)x.fillRect(i*S,j*S,S,S);
+    // lily pad
+    var fx=food.x*S+S/2,fy=food.y*S+S/2;
+    x.fillStyle=css('--pad');x.beginPath();x.moveTo(fx,fy);x.arc(fx,fy,S*.42,.4,Math.PI*2-.4);x.closePath();x.fill();
+    // koi body
+    for(var k=snake.length-1;k>=0;k--){
+      var s=snake[k],r=S*.46*(1-k/(snake.length+6)*.5);
+      x.fillStyle=(k%3===1)?css('--koi2'):css('--koi');
+      x.beginPath();x.arc(s.x*S+S/2,s.y*S+S/2,r,0,Math.PI*2);x.fill();
+    }
+    // eyes
+    var hd=snake[0],hx=hd.x*S+S/2,hy=hd.y*S+S/2,px=-dir[1]*5,py=dir[0]*5;
+    x.fillStyle='#12302f';
+    [1,-1].forEach(function(m){
+      x.beginPath();x.arc(hx+dir[0]*4+px*m,hy+dir[1]*4+py*m,2.2,0,Math.PI*2);x.fill();
+    });
+  }
+  document.addEventListener('keydown',function(e){
+    var m={ArrowUp:'u',ArrowDown:'d',ArrowLeft:'l',ArrowRight:'r',w:'u',s:'d',a:'l',d:'r',W:'u',S:'d',A:'l',D:'r'};
+    if(m[e.key]){e.preventDefault();if(running&&!paused)setDir(m[e.key])}
+    else if(e.key===' '&&running){
+      e.preventDefault();paused=!paused;
+      if(paused){clearInterval(timer);ovT.textContent='Paused';ovP.textContent='Press Space to keep swimming.';go.textContent='Resume';ov.hidden=false}
+      else{ov.hidden=true;timer=setInterval(tick,speed)}
+    }
+  });
+  go.addEventListener('click',function(){
+    if(running&&paused){paused=false;ov.hidden=true;timer=setInterval(tick,speed)}else start();
+  });
+  document.querySelectorAll('.pad button').forEach(function(b){
+    b.addEventListener('pointerdown',function(e){e.preventDefault();if(running&&!paused)setDir(b.dataset.d)});
+  });
+  var t0=null;
+  cv.addEventListener('touchstart',function(e){t0=e.touches[0]},{passive:true});
+  cv.addEventListener('touchend',function(e){
+    if(!t0||!running||paused)return;
+    var t=e.changedTouches[0],dx=t.clientX-t0.clientX,dy=t.clientY-t0.clientY;
+    if(Math.max(Math.abs(dx),Math.abs(dy))<20)return;
+    setDir(Math.abs(dx)>Math.abs(dy)?(dx>0?'r':'l'):(dy>0?'d':'u'));t0=null;
+  },{passive:true});
+  reset();draw();
+})();
+</script>
+</body>
+</html>
+Page 1 of 15
